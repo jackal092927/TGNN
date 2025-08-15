@@ -1,0 +1,17 @@
+tgam_triadic_fixed_autoregressive_proper.pth
+*.pth
+*.pkl
+*.zip
+*.txt
+*.gif
+*.png
+*.out
+*.log
+*.csv
+*.json
+*.npy 
+*.pyc
+*.pt
+*.DS_Store
+7213796
+*.pdf
