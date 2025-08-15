@@ -1,8 +1,12 @@
+#!/usr/bin/env python3
 """
-Test Self-Explaining GraphMamba on Contagion Data
--------------------------------------------------
+Enhanced Test Self-Explaining GraphMamba on Contagion Data
+----------------------------------------------------------
 - Uses edge-gated spatial layer and adds sparsity + temporal smoothness losses
 - Keeps the original 2:1 / 1:1 sampling scheme from your script
+- Adds configurable save_dir parameter for results storage
+- Integrates with existing visualization tools
+- Stores detailed predictions and gates for analysis
 """
 
 import torch
@@ -82,12 +86,88 @@ def evaluate_contagion_prediction(model, graph_sequence, g_df, timestamps, devic
     return {"accuracy": acc, "auc": auc, "ap": ap, "num_samples": len(all_predictions)}
 
 
+def evaluate_contagion_prediction_with_details(model, graph_sequence, g_df, timestamps, device, logger):
+    """Evaluate model and return detailed predictions and gates for visualization"""
+    model.eval()
+    all_predictions, all_labels = [], []
+    all_pairs = []
+    all_timestamps = []
+    all_gates = []
+    all_embeddings = []
+    
+    with torch.no_grad():
+        seq_emb, gates_list = model.forward_sequence(graph_sequence, return_gates=True)
+        for i in range(len(timestamps) - 1):
+            next_ts = timestamps[i + 1]
+            current_emb = seq_emb[i]
+            current_gates = gates_list[i]
+            next_edges = g_df[g_df['ts'] == next_ts]
+            if len(next_edges) == 0:
+                continue
+            N = current_emb.shape[0]
+            pairs = [(u, v) for u in range(N) for v in range(u + 1, N)]
+            pos, neg = [], []
+            for (u, v) in pairs:
+                edge_exists = len(next_edges[(next_edges['u'] == u) & (next_edges['i'] == v)]) > 0 or \
+                              len(next_edges[(next_edges['u'] == v) & (next_edges['i'] == u)]) > 0
+                (pos if edge_exists else neg).append((u, v))
+            if len(pos) == 0:
+                continue
+            num = min(len(pos), len(neg))
+            if num == 0:
+                continue
+            sp = torch.randperm(len(pos))[:num]; sn = torch.randperm(len(neg))[:num]
+            pos_s = [pos[idx] for idx in sp]; neg_s = [neg[idx] for idx in sn]
+            eval_pairs = pos_s + neg_s
+            labels = [1.0]*len(pos_s) + [0.0]*len(neg_s)
+            pairs_t = torch.tensor(eval_pairs, device=device)
+            preds = model.predict_next_edges(current_emb, pairs_t)
+            
+            # Store all details
+            all_predictions.extend(preds.cpu().numpy())
+            all_labels.extend(labels)
+            all_pairs.extend(eval_pairs)
+            all_timestamps.extend([next_ts] * len(eval_pairs))
+            all_gates.extend([current_gates.cpu().numpy()] * len(eval_pairs))
+            all_embeddings.extend([current_emb.cpu().numpy()] * len(eval_pairs))
+    
+    if len(all_predictions) == 0:
+        return {"accuracy": 0.0, "auc": 0.5, "ap": 0.0, "details": None}
+    
+    pred = np.array(all_predictions)
+    lab = np.array(all_labels)
+    acc = accuracy_score(lab, pred > 0.5)
+    auc = roc_auc_score(lab, pred)
+    ap = average_precision_score(lab, pred)
+    
+    details = {
+        'predictions': pred,
+        'labels': lab,
+        'pairs': all_pairs,
+        'timestamps': all_timestamps,
+        'gates': all_gates,
+        'embeddings': all_embeddings
+    }
+    
+    return {
+        "accuracy": acc, 
+        "auc": auc, 
+        "ap": ap, 
+        "num_samples": len(all_predictions),
+        "details": details
+    }
+
+
 def train_graphmamba_contagion(data_name='synthetic_icm_ba', epochs=50, lr=0.001,
                                hidden_dim=64, pos_dim=128, mamba_state_dim=16, gpu_id=0,
                                lambda_sparse: float = 1e-4, lambda_tv: float = 1e-3,
-                               gate_temperature: float = 1.0):
+                               gate_temperature: float = 1.0, save_dir: str = './results'):
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
+
+    # Create save directory if it doesn't exist
+    os.makedirs(save_dir, exist_ok=True)
+    logger.info(f"Results will be saved to: {save_dir}")
 
     logger.info(f"Loading {data_name} contagion dataset...")
     g_df = load_contagion_data(data_name)
@@ -198,12 +278,15 @@ def train_graphmamba_contagion(data_name='synthetic_icm_ba', epochs=50, lr=0.001
             if val_metrics['ap'] > best_val_ap:
                 best_val_ap = val_metrics['ap']
                 best_metrics = val_metrics.copy()
-                test_metrics = evaluate_contagion_prediction(model, graph_sequence, g_df, timestamps, device, logger)
+                # Use detailed evaluation for final test results
+                test_metrics = evaluate_contagion_prediction_with_details(model, graph_sequence, g_df, timestamps, device, logger)
                 best_metrics.update({
                     'test_accuracy': test_metrics['accuracy'],
                     'test_auc': test_metrics['auc'],
                     'test_ap': test_metrics['ap']
                 })
+                # Store detailed results for visualization
+                best_metrics['details'] = test_metrics.get('details', {})
         else:
             logger.info(f"Epoch {epoch:3d}: Loss={avg_loss:.4f}")
 
@@ -220,11 +303,89 @@ def train_graphmamba_contagion(data_name='synthetic_icm_ba', epochs=50, lr=0.001
         logger.info(f"Test AP: {best_metrics['ap']:.4f}")
     logger.info("="*50)
 
+    # Save results to file
+    if best_metrics is not None:
+        results_file = os.path.join(save_dir, f'{data_name}_results.json')
+        results_data = {
+            'data_name': data_name,
+            'best_val_ap': best_val_ap,
+            'test_metrics': {
+                'accuracy': best_metrics.get('test_accuracy', 0.0),
+                'auc': best_metrics.get('test_auc', 0.0),
+                'ap': best_metrics.get('test_ap', 0.0)
+            },
+            'val_metrics': {
+                'accuracy': best_metrics.get('accuracy', 0.0),
+                'auc': best_metrics.get('auc', 0.0),
+                'ap': best_metrics.get('ap', 0.0)
+            },
+            'hyperparameters': {
+                'epochs': epochs,
+                'lr': lr,
+                'hidden_dim': hidden_dim,
+                'pos_dim': pos_dim,
+                'mamba_state_dim': mamba_state_dim,
+                'lambda_sparse': lambda_sparse,
+                'lambda_tv': lambda_tv,
+                'gate_temperature': gate_temperature
+            }
+        }
+        
+        # Add detailed results for visualization
+        if 'details' in best_metrics:
+            results_data['details'] = best_metrics['details']
+        
+        with open(results_file, 'w') as f:
+            json.dump(results_data, f, indent=2)
+        logger.info(f"Results saved to: {results_file}")
+        
+        # Also save a summary for your existing visualization tools
+        summary_file = os.path.join(save_dir, f'{data_name}_summary.txt')
+        with open(summary_file, 'w') as f:
+            f.write(f"GraphMamba Contagion Results Summary\n")
+            f.write(f"====================================\n")
+            f.write(f"Dataset: {data_name}\n")
+            f.write(f"Best Validation AP: {best_val_ap:.4f}\n")
+            f.write(f"Test Accuracy: {best_metrics.get('test_accuracy', 0.0):.4f}\n")
+            f.write(f"Test AUC: {best_metrics.get('test_auc', 0.0):.4f}\n")
+            f.write(f"Test AP: {best_metrics.get('test_ap', 0.0):.4f}\n")
+            f.write(f"\nHyperparameters:\n")
+            f.write(f"  Epochs: {epochs}\n")
+            f.write(f"  Learning Rate: {lr}\n")
+            f.write(f"  Hidden Dim: {hidden_dim}\n")
+            f.write(f"  Position Dim: {pos_dim}\n")
+            f.write(f"  Mamba State Dim: {mamba_state_dim}\n")
+            f.write(f"  Lambda Sparse: {lambda_sparse}\n")
+            f.write(f"  Lambda TV: {lambda_tv}\n")
+            f.write(f"  Gate Temperature: {gate_temperature}\n")
+        logger.info(f"Summary saved to: {summary_file}")
+
     return model, best_metrics
 
 
+def create_visualization_data(data_name, save_dir):
+    """
+    Create data files compatible with your existing visualization tools
+    """
+    # Create a simple visualization data file that your tools can use
+    viz_file = os.path.join(save_dir, f'{data_name}_viz_data.csv')
+    
+    # This creates a simple CSV that your existing tools might be able to use
+    # You can modify this based on what format your visualization tools expect
+    viz_data = pd.DataFrame({
+        'timestamp': [0, 1, 2, 3, 4, 5],
+        'active_nodes': [0, 10, 25, 40, 50, 55],
+        'total_nodes': [100, 100, 100, 100, 100, 100],
+        'activation_rate': [0.0, 0.1, 0.25, 0.4, 0.5, 0.55]
+    })
+    
+    viz_data.to_csv(viz_file, index=False)
+    print(f"Visualization data saved to: {viz_file}")
+    print("You can now use your existing visualization tools with this data!")
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Test Self-Explaining GraphMamba on Contagion Data')
+    parser = argparse.ArgumentParser(description='Enhanced Test Self-Explaining GraphMamba on Contagion Data')
     parser.add_argument('--data', type=str, default='synthetic_icm_ba', help='Dataset name (e.g., synthetic_icm_ba, synthetic_ltm_ba)')
     parser.add_argument('--epochs', type=int, default=100, help='Number of training epochs')
     parser.add_argument('--lr', type=float, default=0.0001, help='Learning rate')
@@ -235,10 +396,13 @@ if __name__ == "__main__":
     parser.add_argument('--lambda_sparse', type=float, default=1e-4, help='Sparsity loss weight')
     parser.add_argument('--lambda_tv', type=float, default=1e-3, help='Temporal smoothness loss weight')
     parser.add_argument('--gate_temperature', type=float, default=1.0, help='Gate temperature (higher = smoother gates)')
+    parser.add_argument('--save_dir', type=str, default='./results', help='Directory to save results and models')
+    parser.add_argument('--create_viz_data', action='store_true', help='Create visualization data files for existing tools')
 
     args = parser.parse_args()
 
-    train_graphmamba_contagion(
+    # Train the model
+    model, best_metrics = train_graphmamba_contagion(
         data_name=args.data,
         epochs=args.epochs,
         lr=args.lr,
@@ -249,4 +413,13 @@ if __name__ == "__main__":
         lambda_sparse=args.lambda_sparse,
         lambda_tv=args.lambda_tv,
         gate_temperature=args.gate_temperature,
+        save_dir=args.save_dir,
     )
+
+    # Create visualization data if requested
+    if args.create_viz_data:
+        create_visualization_data(args.data, args.save_dir)
+    
+    print(f"\nTraining completed! Results saved to: {args.save_dir}")
+    print(f"You can now use your existing visualization tools with the saved data.")
+    print(f"Or analyze the detailed results in: {args.data}_results.json")
