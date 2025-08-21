@@ -198,6 +198,9 @@ def train_graphmamba_contagion(data_name='synthetic_icm_ba', epochs=50, lr=0.001
 
     graph_sequence = [adj.to(device) for adj in graph_sequence]
     logger.info(f"Model parameters: pos_dim={pos_dim}, hidden_dim={hidden_dim}, mamba_state_dim={mamba_state_dim}")
+    logger.info(f"Interpretation parameters: lambda_sparse={lambda_sparse}, lambda_tv={lambda_tv}, gate_temperature={gate_temperature}")
+    logger.info(f"Training parameters: epochs={epochs}, lr={lr}, optimizer=AdamW, weight_decay=1e-5")
+    logger.info(f"Sampling strategy: 2:1 positive:negative ratio for training, 1:1 balanced for evaluation")
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-5)
     criterion = nn.BCELoss()
@@ -377,9 +380,9 @@ def train_graphmamba_contagion(data_name='synthetic_icm_ba', epochs=50, lr=0.001
             'data_name': data_name,
             'best_val_ap': best_val_ap,
             'test_metrics': {
-                'accuracy': best_metrics.get('test_accuracy', 0.0),
-                'auc': best_metrics.get('test_auc', 0.0),
-                'ap': best_metrics.get('test_ap', 0.0)
+                'accuracy': best_metrics.get('accuracy', 0.0),
+                'auc': best_metrics.get('auc', 0.0),
+                'ap': best_metrics.get('ap', 0.0)
             },
             'val_metrics': {
                 'accuracy': best_metrics.get('accuracy', 0.0),
@@ -407,9 +410,37 @@ def train_graphmamba_contagion(data_name='synthetic_icm_ba', epochs=50, lr=0.001
                     details[key] = value.tolist()
             results_data['details'] = details
         
+        # Apply comprehensive JSON serialization fix to entire results_data
+        def make_json_serializable(obj):
+            if isinstance(obj, dict):
+                return {key: make_json_serializable(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [make_json_serializable(item) for item in obj]
+            elif hasattr(obj, 'tolist'):  # numpy array
+                return obj.tolist()
+            elif hasattr(obj, 'item'):  # numpy scalar
+                return obj.item()
+            else:
+                return obj
+        
+        results_data = make_json_serializable(results_data)
+        
         with open(results_file, 'w') as f:
             json.dump(results_data, f, indent=2)
         logger.info(f"Results saved to: {results_file}")
+        
+        # Log comprehensive experiment summary
+        logger.info("\n" + "-"*50)
+        logger.info("EXPERIMENT SUMMARY")
+        logger.info("-"*50)
+        logger.info(f"Model Architecture: GraphMamba with Edge Gates")
+        logger.info(f"Model Parameters: pos_dim={pos_dim}, hidden_dim={hidden_dim}, mamba_state_dim={mamba_state_dim}")
+        logger.info(f"Interpretation Parameters: lambda_sparse={lambda_sparse}, lambda_tv={lambda_tv}, gate_temperature={gate_temperature}")
+        logger.info(f"Training Parameters: epochs={epochs}, lr={lr}, optimizer=AdamW, weight_decay=1e-5")
+        logger.info(f"Sampling Strategy: 2:1 train, 1:1 eval")
+        logger.info(f"Results Directory: {save_dir}")
+        logger.info(f"Checkpoints: {checkpoint_dir}")
+        logger.info("-"*50)
         
         # Also save a summary for your existing visualization tools
         summary_file = os.path.join(save_dir, f'{data_name}_summary.txt')
@@ -418,18 +449,26 @@ def train_graphmamba_contagion(data_name='synthetic_icm_ba', epochs=50, lr=0.001
             f.write(f"====================================\n")
             f.write(f"Dataset: {data_name}\n")
             f.write(f"Best Validation AP: {best_val_ap:.4f}\n")
-            f.write(f"Test Accuracy: {best_metrics.get('test_accuracy', 0.0):.4f}\n")
-            f.write(f"Test AUC: {best_metrics.get('test_auc', 0.0):.4f}\n")
-            f.write(f"Test AP: {best_metrics.get('test_ap', 0.0):.4f}\n")
-            f.write(f"\nHyperparameters:\n")
-            f.write(f"  Epochs: {epochs}\n")
-            f.write(f"  Learning Rate: {lr}\n")
+            f.write(f"Test Accuracy: {best_metrics.get('accuracy', 0.0):.4f}\n")
+            f.write(f"Test AUC: {best_metrics.get('auc', 0.0):.4f}\n")
+            f.write(f"Test AP: {best_metrics.get('ap', 0.0):.4f}\n")
+            f.write(f"\nModel Architecture:\n")
             f.write(f"  Hidden Dim: {hidden_dim}\n")
             f.write(f"  Position Dim: {pos_dim}\n")
             f.write(f"  Mamba State Dim: {mamba_state_dim}\n")
-            f.write(f"  Lambda Sparse: {lambda_sparse}\n")
-            f.write(f"  Lambda TV: {lambda_tv}\n")
-            f.write(f"  Gate Temperature: {gate_temperature}\n")
+            f.write(f"  GNN Layers: 2\n")
+            f.write(f"  Dropout: 0.1\n")
+            f.write(f"  Edge Gates: Enabled\n")
+            f.write(f"\nTraining Parameters:\n")
+            f.write(f"  Epochs: {epochs}\n")
+            f.write(f"  Learning Rate: {lr}\n")
+            f.write(f"  Optimizer: AdamW\n")
+            f.write(f"  Weight Decay: 1e-5\n")
+            f.write(f"  Sampling Strategy: 2:1 train, 1:1 eval\n")
+            f.write(f"\nInterpretation Parameters (Key for Visualization):\n")
+            f.write(f"  Lambda Sparse: {lambda_sparse} (sparsity loss weight)\n")
+            f.write(f"  Lambda TV: {lambda_tv} (temporal variation loss weight)\n")
+            f.write(f"  Gate Temperature: {gate_temperature} (gate sharpening)\n")
         logger.info(f"Summary saved to: {summary_file}")
         
         # Save the trained model

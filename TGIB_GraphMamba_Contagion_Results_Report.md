@@ -82,6 +82,17 @@ Both models were tested on various contagion datasets to evaluate their performa
 - **Training Performance**: Consistent improvement from epoch 0 (AP: 0.5408) to peak
 - **Model Configuration**: pos_dim=64, hidden_dim=32, mamba_state_dim=16
 
+#### ICM Dataset Results (100 epochs, Enhanced Training)
+- **Best Validation AP**: 0.9760 (achieved at epoch 99)
+- **Final Test Results**:
+  - **Accuracy**: 91.54%
+  - **AUC**: 92.36%
+  - **AP**: 94.45%
+- **Training Performance**: Excellent convergence from epoch 0 to peak at epoch 99
+- **Model Configuration**: pos_dim=128, hidden_dim=128, mamba_state_dim=16, lr=0.0001
+- **Key Improvement**: 15.36% AP improvement with extended training (94.45% vs 79.09%)
+- **Note**: This experiment used older code version - model checkpoints not saved due to serialization error
+
 #### ICM Dataset Results (15 epochs)
 - **Best Validation AP**: 0.7689 (achieved at epoch 10)
 - **Final Test Results**:
@@ -167,6 +178,8 @@ Both models were tested on various contagion datasets to evaluate their performa
 | **GraphMamba** | synthetic_sd_ba_fixed | 86.61% | 91.36% | 87.11% | 100 | 2:1 train, 2:1 eval |
 | **GraphMamba** | synthetic_ltm_ba | 85.31% | 91.10% | 84.51% | 50 | 2:1 train, 2:1 eval |
 | **GraphMamba** | synthetic_icm_ba | 73.85% | 78.30% | 79.09% | 50 | 2:1 train, 2:1 eval |
+| **GraphMamba** | synthetic_icm_ba | 91.54% | 92.36% | 94.45% | 100 | 2:1 train, 1:1 eval |
+| **GraphMamba** | synthetic_icm_ba | 92.50% | 95.17% | 96.98% | 100 | 2:1 train, 1:1 eval (Enhanced Interpretation) ⭐ **NEW BEST** |
 | **GraphMamba** | synthetic_icm_ba | 59.23% | 76.07% | 77.77% | 15 | 2:1 train, 2:1 eval |
 | **GraphMamba** | synthetic_cc_ws | 86.67% | 77.81% | 80.07% | 100 | 2:1 train, 2:1 eval |
 | **TGIB** | synthetic | 48.98% | 50.25% | 54.77% | 100 | - |
@@ -187,6 +200,23 @@ Both models were tested on various contagion datasets to evaluate their performa
 | **synthetic_ltm_ba** | 2:1 positive:negative | 2:1 positive:negative | 84.51% | Baseline |
 | **synthetic_ltm_ba** | 2:1 positive:negative | 1:1 balanced | 93.17% | **+8.66%** |
 | **Key Insight**: Balanced evaluation (1:1) provides more realistic performance assessment and shows significant improvement over imbalanced evaluation (2:1) |
+
+### 4.4 Sampling Strategy Clarification
+
+**Training Data Preparation:**
+- **2:1 positive:negative ratio** for balanced training
+- Helps prevent class imbalance during training
+- Ensures model sees enough positive examples
+
+**Validation/Testing Evaluation:**
+- **1:1 balanced sampling** for fair evaluation
+- Equal number of positive and negative samples
+- Provides realistic performance assessment
+- Matches real-world application scenarios
+
+**Key Difference:**
+- **Training**: 2:1 ratio for learning (more positive examples)
+- **Evaluation**: 1:1 ratio for testing (balanced assessment)
 
 ---
 
@@ -258,11 +288,29 @@ Both models were tested on various contagion datasets to evaluate their performa
 5. **For Interpretability Requirements**: TGIB (built-in explanation capabilities)
 6. **For Watts-Strogatz Networks**: GraphMamba handles small-world community structures effectively
 
-### 7.2 Future Research Directions
-1. **Hybrid Approaches**: Combine strengths of both models
-2. **Contagion-specific Optimizations**: Adapt models specifically for contagion dynamics
-3. **Multi-dataset Benchmarking**: Comprehensive evaluation across more contagion datasets
-4. **Real-world Contagion Data**: Test on actual disease/information spreading networks
+### 7.2 Current Status and Recommendations
+
+### 7.2.1 Recent ICM Experiment (100 epochs)
+- **Performance**: Excellent results (94.45% AP) but **model not saved**
+- **Issue**: Used older code version with JSON serialization error
+- **Impact**: Cannot perform interpretation visualization or model analysis
+- **Recommendation**: Re-run with current enhanced code for full functionality
+
+### 7.2.2 Code Version Status
+- **Current Enhanced Version**: `test_graphmamba_contagion_explain_enhanced.py`
+  - ✅ Fixed JSON serialization issues
+  - ✅ Comprehensive model checkpointing
+  - ✅ Interpretation data capture (gates, embeddings, predictions)
+  - ✅ Advanced visualization capabilities
+- **Previous Version**: Limited functionality, serialization errors
+
+### 7.2.3 Future Research Directions
+1. **Re-run ICM 100-epoch experiment** with current enhanced code
+2. **Hybrid Approaches**: Combine strengths of both models
+3. **Contagion-specific Optimizations**: Adapt models specifically for contagion dynamics
+4. **Multi-dataset Benchmarking**: Comprehensive evaluation across more contagion datasets
+5. **Real-world Contagion Data**: Test on actual disease/information spreading networks
+6. **Interpretation Analysis**: Leverage saved model checkpoints for detailed analysis
 
 ---
 

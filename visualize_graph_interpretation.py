@@ -725,11 +725,20 @@ def create_temporal_attention_evolution(details, output_dir):
 
 def main():
     """Main function to create all interpretation visualizations"""
+    import argparse
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Visualize GraphMamba interpretation results')
+    parser.add_argument('--results_file', required=True, help='Path to results JSON file')
+    parser.add_argument('--output_dir', help='Output directory for visualizations (auto-generated if not specified)')
+    
+    args = parser.parse_args()
+    
     print("🧪 GRAPH-LEVEL INTERPRETATION VISUALIZATION")
     print("="*60)
     
     # Check for results file
-    results_file = "./test_small_model_fixed_debug/synthetic_icm_ba_results.json"
+    results_file = args.results_file
     
     if not os.path.exists(results_file):
         print(f"❌ Results file not found: {results_file}")
@@ -741,11 +750,37 @@ def main():
     if not details:
         return
     
-    # Create output directory
-    output_dir = "./test_small_model/interpretation_visualizations"
+    # Auto-generate output directory based on experiment timestamp
+    if args.output_dir:
+        output_dir = args.output_dir
+    else:
+        # Extract experiment timestamp from results file path
+        results_path = Path(results_file)
+        experiment_dir = results_path.parent.name
+        
+        # Check if it contains a timestamp pattern (e.g., icm_viz_enhanced_20240816_1430)
+        if '_' in experiment_dir and any(char.isdigit() for char in experiment_dir):
+            # Extract the timestamp part more robustly
+            parts = experiment_dir.split('_')
+            # Look for the last two parts that form a timestamp (YYYYMMDD_HHMMSS)
+            for i in range(len(parts) - 1):
+                if (len(parts[i]) == 8 and parts[i].isdigit() and 
+                    len(parts[i+1]) == 6 and parts[i+1].isdigit()):
+                    timestamp_part = f"{parts[i]}_{parts[i+1]}"
+                    break
+            else:
+                # Fallback: use last two parts
+                timestamp_part = f"{parts[-2]}_{parts[-1]}"
+            
+            output_dir = f"./experiments/{experiment_dir}/interpretation_visualizations_{timestamp_part}"
+        else:
+            # Fallback to default naming
+            output_dir = f"./experiments/{experiment_dir}/interpretation_visualizations"
+    
     os.makedirs(output_dir, exist_ok=True)
     
     print(f"\n📁 Output directory: {output_dir}")
+    print(f"📊 Results file: {results_file}")
     
     # Create different types of visualizations
     try:
