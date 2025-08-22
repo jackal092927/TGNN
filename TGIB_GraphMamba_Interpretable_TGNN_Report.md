@@ -157,6 +157,28 @@ Where:
 - **Pattern Type**: Perfect triadic closure (deterministic structural patterns)
 - **Previous Performance**: GraphRNN failed with 51.8% AP on this dataset
 
+#### **Network Evolution Analysis (NEW)**
+- **Total Edges**: 1,458 across 28 timestamps
+- **Growth Pattern**: Explosive late-phase growth (65.5% of edges in final 10 timestamps)
+- **Peak Activity**: t=23 with 381 new edges (26.1% of total edges in one timestamp!)
+- **Evolution Phases**:
+  - **Early (t=0-8)**: 170 edges (11.7%) - Initial network formation
+  - **Middle (t=9-17)**: 333 edges (22.8%) - Accelerated growth, first cascades
+  - **Late (t=18-27)**: 955 edges (65.5%) - Massive triadic closure cascades
+- **Key Insight**: The massive t=23 spike (381 edges) represents peak triadic closure cascades
+
+#### **Influence Score Coverage Analysis (NEW)**
+- **Coverage Performance**: 72.8% average coverage rate across all timestamps
+- **Edge Selection Efficiency**: 85.0% average edge selection needed for 95% coverage
+- **Phase Performance**:
+  - **Early Phase**: 65.8% coverage, 82.3% edge selection
+  - **Middle Phase**: 73.8% coverage, 88.3% edge selection  
+  - **Late Phase**: 78.3% coverage, 84.4% edge selection
+- **Exceptional Cases**:
+  - **Perfect Coverage**: t=1, t=2, t=4, t=5, t=14, t=20, t=27 achieve 100% coverage
+  - **Most Efficient**: t=27 (97.6% coverage with 7.1% edge selection), t=14 (100% coverage with 36.0% selection)
+- **Key Insight**: GraphMamba's influence scores effectively identify triadic closure structural patterns, with improving performance in later network evolution phases
+
 #### **GraphMamba Self-Explaining Performance**
 - **Best Validation AP**: **95.88%** (achieved at epoch 70)
 - **Final Test Results**:
@@ -274,11 +296,35 @@ Where:
 - **Temporal Evolution**: Attention pattern evolution showing how explanations change over time
 - **Top Influential Edges**: Identification of key structural components driving predictions
 
+#### **Event Influence Visualizations (NEW - Gradient × Gate Analysis)**
+- **Per-Event Edge Influence**: Computed influence = G_t[i,j] × ReLU(∇y_hat/∇G_t[i,j])
+- **Comprehensive Timestamp Coverage**: Visualizations across 5 key timestamps (5, 10, 15, 20, 25)
+- **Multiple Edge Pair Predictions**: 14 different edge predictions analyzed
+- **Edge Pair Predictions by Timestamp**:
+  - **t=5**: (52,97), (68,97), (97,169) - Early network formation
+  - **t=10**: (3,34), (3,139), (3,197) - Network expansion phase
+  - **t=15**: (5,21), (154,72), (176,61) - Mid-stage development
+  - **t=20**: (1,191), (102,180) - Advanced network structure
+  - **t=25**: (2,190), (3,130), (4,130) - Late-stage triadic closures
+- **Influence Heatmaps**: Visual representation of edge importance for each prediction
+- **Subgraph Visualizations**: Network structure with highlighted influential edges
+- **CSV Data Export**: Detailed influence scores and gate values for analysis
+- **File Sizes**: Subgraph plots range from 1.8MB to 4.2MB showing network complexity evolution
+
 #### **Visualization Insights**
 - **Edge Attention Patterns**: Clear identification of important edges for triadic closure
 - **Temporal Consistency**: Attention patterns maintain logical consistency across timesteps
 - **Structural Understanding**: Visual confirmation of triadic closure pattern recognition
 - **Interpretability Validation**: Visual proof that self-explaining capabilities work at scale
+- **Gradient-Based Explanations**: Deep insights into model decision-making process
+- **Gate Value Analysis**: Understanding of how edge gates influence predictions
+
+#### **Visualization Quality Improvements (NEW)**
+- **Node Spacing**: Spring layout with k=3.0 and 100 iterations prevents node overlap
+- **Background Edges**: Lighter black edges (alpha=0.4) provide subtle network context
+- **Highlighted Edges**: Red influential edges (width 6.0) and blue target edges stand out clearly
+- **Figure Size**: 20×16 canvas accommodates well-spaced network layouts
+- **File Sizes**: 1.8MB to 4.2MB subgraph plots show network complexity evolution
 
 ### 5.2 Performance Impact
 
@@ -308,7 +354,34 @@ Where:
 
 ## 6. Technical Implementation Details
 
-### 6.1 Self-Explaining Architecture
+### 6.1 Event Influence Analysis Methodology (NEW)
+
+#### **Gradient × Gate Analysis**
+The event influence visualization computes per-event edge importance using:
+```
+influence[i,j] = G_t[i,j] × ReLU(∇y_hat(u,v) / ∇G_t[i,j])
+```
+
+Where:
+- **G_t[i,j]**: Edge gate value from the first spatial layer at time t
+- **∇y_hat(u,v)**: Gradient of prediction for target edge (u,v) with respect to gate G_t[i,j]
+- **ReLU**: Ensures only positive influences are considered
+- **Result**: High influence values indicate edges that strongly contribute to the prediction
+
+#### **Implementation Details**
+- **Model Loading**: Loads trained GraphMamba checkpoint with edge gates enabled
+- **Gradient Computation**: Uses PyTorch autograd to compute gradients through the model
+- **Gate Retention**: Ensures gradients flow through the gate computation path
+- **Edge Masking**: Applies adjacency matrix masking to focus on existing edges
+- **Top-K Analysis**: Identifies the most influential edges for each prediction
+
+#### **Visualization Outputs**
+- **Influence Heatmaps**: 2D matrices showing edge importance across the graph
+- **Subgraph Plots**: Network visualizations highlighting influential edges
+- **CSV Data**: Detailed influence scores, gate values, and prediction confidence
+- **JSON Summaries**: Metadata for each visualization including timestamps and edge pairs
+
+### 6.2 Self-Explaining Architecture
 
 #### **Sparsity Regularization**
 ```python
@@ -372,6 +445,26 @@ gated_attention = attention_weights / temperature
 #### **Temporal Graph Analysis**
 - **Transportation**: Analyze traffic flow patterns
 - **Communication**: Understand message spreading
+
+#### **Triadic Closure Analysis (NEW)**
+- **Social Network Formation**: Understand how new connections form
+- **Structural Evolution**: Analyze network growth patterns
+- **Influence Identification**: Find key edges that enable new connections
+- **Predictive Modeling**: Forecast future network structure changes
+
+### 7.2 Event Influence Analysis Applications (NEW)
+
+#### **Model Interpretability**
+- **Decision Explanation**: Understand why the model predicts specific connections
+- **Edge Importance**: Identify which existing edges are most critical for predictions
+- **Temporal Dependencies**: Analyze how past structure influences future predictions
+- **Validation**: Verify that the model learns meaningful patterns
+
+#### **Network Science Insights**
+- **Triadic Closure Validation**: Confirm that the model recognizes triadic patterns
+- **Structural Motifs**: Identify important network substructures
+- **Growth Mechanisms**: Understand how networks evolve over time
+- **Causal Relationships**: Establish causal links between network structure and growth
 - **Biological Networks**: Model protein interaction dynamics
 
 ### 7.2 Model Improvements
